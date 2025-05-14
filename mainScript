@@ -1,0 +1,45 @@
+$monitorFolder = "C:\MonitorarHoras"
+$popupInterval = New-TimeSpan -Hours 1
+$lastPopupTime = $null
+$lastStartFile = $null
+
+function Get-LatestStartFile {
+    Get-ChildItem $monitorFolder -Filter "start*.txt" | Sort-Object CreationTime -Descending | Select-Object -First 1
+}
+
+while ($true) {
+    $currentStartFile = Get-LatestStartFile
+    if ($currentStartFile) {
+        if (-not $lastStartFile -or $currentStartFile.Name -ne $lastStartFile.Name) {
+            $lastStartFile = $currentStartFile
+            $lastPopupTime = $null
+        }
+
+        $cycleName = [System.IO.Path]::GetFileNameWithoutExtension($currentStartFile.Name)
+        $logFile = "$monitorFolder\logs\log_$cycleName.txt"
+        $startTime = $currentStartFile.CreationTime
+        $now = Get-Date
+        $elapsed = $now - $startTime
+        $hours = [math]::Floor($elapsed.TotalHours)
+
+        Set-Content $logFile "Horas decorridas desde $startTime : $hours"
+
+        if ($hours -ge 4000) {
+            $showPopup = $false
+
+            if (-not $lastPopupTime) {
+                $showPopup = $true
+            } elseif (($now - $lastPopupTime) -ge $popupInterval) {
+                $showPopup = $true
+            }
+
+            if ($showPopup) {
+                [System.Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms") | Out-Null
+                [System.Windows.Forms.MessageBox]::Show("Alerta: 4000 horas atingidas para $cycleName!","Manutencao necessaria",[System.Windows.Forms.MessageBoxButtons]::OK,[System.Windows.Forms.MessageBoxIcon]::Warning)
+                $lastPopupTime = Get-Date
+            }
+        }
+    }
+
+    Start-Sleep -Seconds 60
+}
